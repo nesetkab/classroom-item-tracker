@@ -81,4 +81,20 @@ public class InventoryController {
 
         return ResponseEntity.ok(summaryReport);
     }
+    // Add this method inside the InventoryController class
+
+    /**
+     * Endpoint to delete an item type.
+     * Maps to: DELETE /api/items/{itemName}
+     * Example Usage: DELETE /api/items/calculator
+     */
+    @DeleteMapping("/items/{itemName}")
+    public ResponseEntity<String> deleteItem(@PathVariable String itemName) {
+        String result = inventoryService.deleteItem(itemName);
+        if (result.startsWith("Error")) {
+            // HttpStatus.CONFLICT (409) is a good status code for "cannot perform because of current state"
+            return new ResponseEntity<>(result, HttpStatus.CONFLICT);
+        }
+        return ResponseEntity.ok(result);
+    }
 }

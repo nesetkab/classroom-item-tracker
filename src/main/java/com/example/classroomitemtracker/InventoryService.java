@@ -113,4 +113,33 @@ public class InventoryService {
     public List<CheckoutRecord> getMissingItemsReport() {
         return this.checkedOutRecords;
     }
+
+    /**
+     * Deletes an item type from the system.
+     * Will fail if any items of this type are currently checked out.
+     *
+     * @param itemName The name of the item to delete.
+     * @return A message indicating the result of the operation.
+     */
+    public String deleteItem(String itemName) {
+        Item itemToDelete = itemsMap.get(itemName);
+
+        if (itemToDelete == null) {
+            return "Error: Item '" + itemName + "' not found and cannot be deleted.";
+        }
+
+        // Safety Check: Verify no items of this type are currently checked out.
+        boolean isItemCheckedOut = checkedOutRecords.stream()
+                .anyMatch(record -> record.getItemName().equalsIgnoreCase(itemName));
+
+        if (isItemCheckedOut) {
+            long outstandingCount = checkedOutRecords.stream()
+                    .filter(record -> record.getItemName().equalsIgnoreCase(itemName)).count();
+            return "Error: Cannot delete '" + itemName + "'. " + outstandingCount + " item(s) are still checked out.";
+        }
+
+        // If the safety check passes, remove the item.
+        itemsMap.remove(itemName);
+        return "Successfully deleted item type: '" + itemName + "'.";
+    }
 }
