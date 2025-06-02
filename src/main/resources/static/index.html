@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classroom Item Tracker</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        h1, h2 { color: #2c3e50; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        .form-section, .report-section { background-color: #fdfdfd; border: 1px solid #e0e0e0; padding: 20px; margin-top: 20px; border-radius: 5px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input[type="text"], input[type="number"] { width: calc(100% - 20px); padding: 8px 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background-color: #3498db; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #2980b9; }
+        #statusMessage { margin-top: 20px; padding: 15px; border-radius: 5px; text-align: center; font-weight: bold; display: none; }
+        .success { background-color: #e8f5e9; color: #2e7d32; }
+        .error { background-color: #ffebee; color: #c62828; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { background-color: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Classroom Item Tracker</h1>
+
+    <div id="statusMessage"></div>
+
+    <div class="form-section">
+        <h2>Actions</h2>
+        <form id="initForm">
+            <label for="initItemName">Add New Item Type:</label>
+            <input type="text" id="initItemName" placeholder="Item Name (e.g., calculator)" required>
+            <label for="initItemTotal">Total Quantity:</label>
+            <input type="number" id="initItemTotal" placeholder="e.g., 20" required>
+            <button type="submit">Add Item</button>
+        </form>
+        <hr>
+        <form id="checkoutForm">
+            <label for="checkoutItemName">Check Out Item:</label>
+            <input type="text" id="checkoutItemName" placeholder="Item Name" required>
+            <label for="checkoutStudentName">Student Name:</label>
+            <input type="text" id="checkoutStudentName" placeholder="Student's Full Name" required>
+            <button type="submit">Check Out</button>
+        </form>
+        <hr>
+        <form id="checkinForm">
+            <label for="checkinItemName">Check In Item:</label>
+            <input type="text" id="checkinItemName" placeholder="Item Name" required>
+            <label for="checkinStudentName">Student Name:</label>
+            <input type="text" id="checkinStudentName" placeholder="Student's Full Name" required>
+            <button type="submit">Check In</button>
+        </form>
+    </div>
+
+    <div class="report-section">
+        <h2>Live Summary Report</h2>
+        <div id="summaryReport">
+            <h3>Current Item Counts</h3>
+            <ul id="itemCountsList"><li>No items initialized.</li></ul>
+            <h3>Missing Items</h3>
+            <ul id="missingItemsList"><li>All items are accounted for.</li></ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    // This function runs when the entire HTML document has been loaded
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- DOM Element References ---
+        const initForm = document.getElementById('initForm');
+        const checkoutForm = document.getElementById('checkoutForm');
+        const checkinForm = document.getElementById('checkinForm');
+        const statusMessage = document.getElementById('statusMessage');
+        const itemCountsList = document.getElementById('itemCountsList');
+        const missingItemsList = document.getElementById('missingItemsList');
+
+        // --- Event Listeners for Forms ---
+        initForm.addEventListener('submit', handleInit);
+        checkoutForm.addEventListener('submit', handleCheckout);
+        checkinForm.addEventListener('submit', handleCheckin);
+
+        // --- Core Functions ---
+
+        // Function to refresh the summary report by fetching data from the backend
+        async function refreshSummary() {
+            try {
+                const response = await fetch('/api/summary');
+                if (!response.ok) throw new Error('Failed to fetch summary.');
+
+                const summary = await response.json();
+
+                // Update Item Counts List
+                itemCountsList.innerHTML = ''; // Clear current list
+                if (summary.itemAvailability.length === 0) {
+                    itemCountsList.innerHTML = '<li>No items initialized.</li>';
+                } else {
+                    summary.itemAvailability.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = `${item.name}: ${item.availableCount} available out of ${item.totalCount}`;
+                        itemCountsList.appendChild(li);
+                    });
+                }
+
+                // Update Missing Items List
+                missingItemsList.innerHTML = ''; // Clear current list
+                if (summary.missingItems.length === 0) {
+                    missingItemsList.innerHTML = '<li>All items are accounted for. Excellent!</li>';
+                } else {
+                    summary.missingItems.forEach(record => {
+                        const li = document.createElement('li');
+                        li.textContent = `Item: ${record.itemName} - Checked out to: ${record.studentName}`;
+                        missingItemsList.appendChild(li);
+                    });
+                }
+
+            } catch (error) {
+                updateStatus(error.message, true);
+            }
+        }
+
+        // --- Event Handlers ---
+
+        async function handleInit(event) {
+            event.preventDefault(); // Prevent page reload
+            const name = document.getElementById('initItemName').value;
+            const total = document.getElementById('initItemTotal').value;
+
+            // The 'fetch' function sends the request to our Java backend
+            const response = await fetch(`/api/items?name=${encodeURIComponent(name)}&total=${total}`, { method: 'POST' });
+
+            if (response.ok) {
+                const newItem = await response.json();
+                updateStatus(`Successfully added item: ${newItem.name}`, false);
+                initForm.reset(); // Clear the form fields
+            } else {
+                const errorText = await response.text();
+                updateStatus(`Error: ${errorText}`, true);
+            }
+            refreshSummary(); // Update the report
+        }
+
+        async function handleCheckout(event) {
+            event.preventDefault();
+            const itemName = document.getElementById('checkoutItemName').value;
+            const studentName = document.getElementById('checkoutStudentName').value;
+
+            const response = await fetch(`/api/checkout?itemName=${encodeURIComponent(itemName)}&studentName=${encodeURIComponent(studentName)}`, { method: 'POST' });
+            const resultText = await response.text();
+
+            updateStatus(resultText, !response.ok);
+            if(response.ok) checkoutForm.reset();
+            refreshSummary();
+        }
+
+        async function handleCheckin(event) {
+            event.preventDefault();
+            const itemName = document.getElementById('checkinItemName').value;
+            const studentName = document.getElementById('checkinStudentName').value;
+
+            const response = await fetch(`/api/checkin?itemName=${encodeURIComponent(itemName)}&studentName=${encodeURIComponent(studentName)}`, { method: 'POST' });
+            const resultText = await response.text();
+
+            updateStatus(resultText, !response.ok);
+            if(response.ok) checkinForm.reset();
+            refreshSummary();
+        }
+
+        // --- Utility Functions ---
+
+        function updateStatus(message, isError) {
+            statusMessage.textContent = message;
+            statusMessage.className = isError ? 'error' : 'success';
+            statusMessage.style.display = 'block';
+        }
+
+        // Load the initial data when the page loads
+        refreshSummary();
+    });
+</script>
+
+</body>
+</html>
