@@ -17,7 +17,6 @@
         .delete-btn:hover { background-color: #c0392b; }
         #statusMessage { margin-top: 20px; padding: 15px; border-radius: 5px; text-align: center; font-weight: bold; display: none; }
         .success { background-color: #e8f5e9; color: #2e7d32; }
-        .error { background-color: #ffebee; color: #c62828; }
         ul { list-style-type: none; padding-left: 0; }
         li { display: flex; justify-content: space-between; align-items: center; background-color: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 5px; }
     </style>
@@ -81,9 +80,7 @@
         initForm.addEventListener('submit', handleInit);
         checkoutForm.addEventListener('submit', handleCheckout);
         checkinForm.addEventListener('submit', handleCheckin);
-        // **NEW**: Use event delegation for delete buttons
         itemCountsList.addEventListener('click', handleDelete);
-
 
         // --- Core Functions ---
         async function refreshSummary() {
@@ -92,14 +89,12 @@
                 if (!response.ok) throw new Error('Failed to fetch summary.');
                 const summary = await response.json();
 
-                // Update Item Counts List
                 itemCountsList.innerHTML = '';
                 if (summary.itemAvailability.length === 0) {
                     itemCountsList.innerHTML = '<li>No items initialized.</li>';
                 } else {
                     summary.itemAvailability.forEach(item => {
                         const li = document.createElement('li');
-                        // **MODIFIED**: Add a span for text and a button for deleting
                         li.innerHTML = `
                             <span>${item.name}: ${item.availableCount} available out of ${item.totalCount}</span>
                             <button class="delete-btn" data-item-name="${item.name}">Delete</button>
@@ -108,7 +103,6 @@
                     });
                 }
 
-                // Update Missing Items List
                 missingItemsList.innerHTML = '';
                 if (summary.missingItems.length === 0) {
                     missingItemsList.innerHTML = '<li>All items are accounted for. Excellent!</li>';
@@ -136,7 +130,7 @@
                 initForm.reset();
             } else {
                 const errorText = await response.text();
-                updateStatus(`Error: ${errorText}`, true);
+                updateStatus(errorText, true);
             }
             refreshSummary();
         }
@@ -147,8 +141,6 @@
             const studentName = document.getElementById('checkoutStudentName').value;
             const response = await fetch(`/api/checkout?itemName=${encodeURIComponent(itemName)}&studentName=${encodeURIComponent(studentName)}`, { method: 'POST' });
             const resultText = await response.text();
-            // **ERROR HANDLING**: The check `!response.ok` catches errors sent from the backend
-            // (like item not found) and displays them in the 'error' style.
             updateStatus(resultText, !response.ok);
             if(response.ok) checkoutForm.reset();
             refreshSummary();
@@ -160,19 +152,14 @@
             const studentName = document.getElementById('checkinStudentName').value;
             const response = await fetch(`/api/checkin?itemName=${encodeURIComponent(itemName)}&studentName=${encodeURIComponent(studentName)}`, { method: 'POST' });
             const resultText = await response.text();
-            // **ERROR HANDLING**: Similarly, this catches and displays errors for bad check-ins.
             updateStatus(resultText, !response.ok);
             if(response.ok) checkinForm.reset();
             refreshSummary();
         }
 
-        // **NEW**: Handler for the delete button clicks
         async function handleDelete(event) {
-            // Check if the clicked element is actually a delete button
             if (event.target.classList.contains('delete-btn')) {
                 const itemName = event.target.dataset.itemName;
-
-                // Confirm with the user before deleting
                 if (confirm(`Are you sure you want to delete the item type '${itemName}'? This cannot be undone.`)) {
                     const response = await fetch(`/api/items/${encodeURIComponent(itemName)}`, { method: 'DELETE' });
                     const resultText = await response.text();
@@ -183,10 +170,23 @@
         }
 
         // --- Utility Functions ---
+
+        /**
+         * **MODIFIED**: Displays a popup alert for errors and an on-page message for success.
+         */
         function updateStatus(message, isError) {
-            statusMessage.textContent = message;
-            statusMessage.className = isError ? 'error' : 'success';
-            statusMessage.style.display = 'block';
+            // Always hide the on-page status message first
+            statusMessage.style.display = 'none';
+
+            if (isError) {
+                // Use the browser's native alert for popups
+                alert(message);
+            } else {
+                // For success, show the message on the page
+                statusMessage.textContent = message;
+                statusMessage.className = 'success';
+                statusMessage.style.display = 'block';
+            }
         }
 
         // Load initial data
