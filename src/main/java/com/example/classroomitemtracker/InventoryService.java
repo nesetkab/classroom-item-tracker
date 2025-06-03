@@ -1,66 +1,42 @@
 package com.example.classroomitemtracker;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
-@Service // Tells Spring to manage this class as a service
+@Service
 public class InventoryService {
 
-    // Replaces `itemsList = new ArrayList<Item>()`.
-    // We use a Map to easily find items by their name (e.g., "calculator").
-    // A ConcurrentHashMap is "thread-safe," which is good practice for web applications.
     private final Map<String, Item> itemsMap = new ConcurrentHashMap<>();
-
-    // Replaces `checkedOutRecords = new ArrayList<CheckoutRecord>()`.
-    // A CopyOnWriteArrayList is also thread-safe.
     private final List<CheckoutRecord> checkedOutRecords = new CopyOnWriteArrayList<>();
 
-
-    // --- Core Logic Methods based on your Pseudocode ---
-
     /**
-     * Corresponds to the logic inside the 'InitializeSystem' loop for adding a new item.
-     * In a web app, initialization happens one item at a time via API calls,
-     * not in a single loop on startup.
-     *
-     * @param itemName The name of the item to add (e.g., "calculator").
-     * @param total The total number of this item available.
-     * @return The newly created Item object, or null if it already exists or input is invalid.
+     * This method is automatically run by Spring once after the service has been created.
+     * It pre-populates our inventory with the three fixed items.
      */
-    public Item initializeNewItem(String itemName, int total) {
-        if (total < 0) {
-            System.err.println("Total count cannot be negative.");
-            return null;
-        }
-        if (itemsMap.containsKey(itemName)) {
-            System.err.println("Item '" + itemName + "' already exists.");
-            return null;
-        }
-
-        Item newItem = new Item(itemName, total);
-        itemsMap.put(itemName, newItem);
-        System.out.println("'" + itemName + "' added with " + total + " items.");
-        return newItem;
+    @PostConstruct
+    public void initializeDefaultItems() {
+        itemsMap.put("Calculator", new Item("Calculator", 10)); // 10 calculators
+        itemsMap.put("Pencil", new Item("Pencil", 30));         // 30 pencils
+        itemsMap.put("iPad", new Item("iPad", 5));              // 5 iPads
+        System.out.println("Default items have been initialized.");
     }
 
-    /**
-     * Corresponds to `CheckoutItem(studentName, itemName)`.
-     * We'll return a String message to show the result to the user.
-     */
-    public String checkoutItem(String studentName, String itemName) {
-        // Corresponds to `findItemInList(itemName)`
-        Item itemToCheckout = itemsMap.get(itemName);
+    // --- Core Logic Methods ---
 
+    public String checkoutItem(String studentName, String itemName) {
+        Item itemToCheckout = itemsMap.get(itemName);
         if (itemToCheckout == null) {
+            // This check is now mostly for safety; the dropdown should prevent this.
             return "Error: Item type '" + itemName + "' is not tracked.";
         }
 
-        // The decrementAvailable() method already checks if count > 0.
         if (itemToCheckout.decrementAvailable()) {
             CheckoutRecord newRecord = new CheckoutRecord(studentName, itemName);
             checkedOutRecords.add(newRecord);
@@ -70,19 +46,12 @@ public class InventoryService {
         }
     }
 
-    /**
-     * Corresponds to `CheckinItem(studentName, itemName)`.
-     * Returns a String message with the result.
-     */
     public String checkinItem(String studentName, String itemName) {
         Item itemToReturn = itemsMap.get(itemName);
-
         if (itemToReturn == null) {
             return "Error: Item type '" + itemName + "' is not tracked by the system.";
         }
 
-        // Find and remove the matching checkout record.
-        // We use a modern Java stream and lambda for a concise search.
         boolean recordFoundAndRemoved = checkedOutRecords.removeIf(record ->
                 record.getStudentName().equalsIgnoreCase(studentName) &&
                         record.getItemName().equalsIgnoreCase(itemName)
@@ -99,47 +68,51 @@ public class InventoryService {
     // --- Methods for Reporting ---
 
     /**
-     * Gets a list of all currently tracked items and their counts.
-     * Part of the `GenerateSummaryReport` logic.
+     * NEW: A method to get the names of the items we are tracking.
+     * The frontend will use this to build the dropdown menus.
      */
-    public List<Item> getAllItemCounts() {
-        return itemsMap.values().stream().collect(Collectors.toList());
+    public List<String> getTrackedItemNames() {
+        return new ArrayList<>(itemsMap.keySet());
     }
 
-    /**
-     * Gets a list of all items that are currently checked out.
-     * Part of the `GenerateSummaryReport` logic.
-     */
+    public List<Item> getAllItemCounts() {
+        return new ArrayList<>(itemsMap.values());
+    }
+
     public List<CheckoutRecord> getMissingItemsReport() {
         return this.checkedOutRecords;
     }
 
+    // Add this method inside the InventoryService class
+
     /**
-     * Deletes an item type from the system.
-     * Will fail if any items of this type are currently checked out.
+     * Updates the total count for a given item.
      *
-     * @param itemName The name of the item to delete.
-     * @return A message indicating the result of the operation.
+     * @param itemName      The name of the item to update.
+     * @param newTotalCount The new total quantity for the item.
+     * @return A message indicating the result.
      */
-    public String deleteItem(String itemName) {
-        Item itemToDelete = itemsMap.get(itemName);
-
-        if (itemToDelete == null) {
-            return "Error: Item '" + itemName + "' not found and cannot be deleted.";
+    public String updateItemTotalCount(String itemName, int newTotalCount) {
+        Item item = itemsMap.get(itemName);
+        if (item == null) {
+            return "Error: Item '" + itemName + "' not found.";
         }
 
-        // Safety Check: Verify no items of this type are currently checked out.
-        boolean isItemCheckedOut = checkedOutRecords.stream()
-                .anyMatch(record -> record.getItemName().equalsIgnoreCase(itemName));
-
-        if (isItemCheckedOut) {
-            long outstandingCount = checkedOutRecords.stream()
-                    .filter(record -> record.getItemName().equalsIgnoreCase(itemName)).count();
-            return "Error: Cannot delete '" + itemName + "'. " + outstandingCount + " item(s) are still checked out.";
+        if (newTotalCount < 0) {
+            return "Error: Total count cannot be negative.";
         }
 
-        // If the safety check passes, remove the item.
-        itemsMap.remove(itemName);
-        return "Successfully deleted item type: '" + itemName + "'.";
+        int currentlyCheckedOut = item.getTotalCount() - item.getAvailableCount();
+        if (newTotalCount < currentlyCheckedOut) {
+            return "Error: Cannot set total to " + newTotalCount + ". There are currently "
+                    + currentlyCheckedOut + " items checked out.";
+        }
+
+        // Calculate the difference to adjust the available count
+        int difference = newTotalCount - item.getTotalCount();
+        item.setAvailableCount(item.getAvailableCount() + difference);
+        item.setTotalCount(newTotalCount);
+
+        return "Total count for '" + itemName + "' updated to " + newTotalCount + ".";
     }
 }

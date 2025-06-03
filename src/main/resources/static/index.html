@@ -10,15 +10,18 @@
         h1, h2 { color: #2c3e50; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
         .form-section, .report-section { background-color: #fdfdfd; border: 1px solid #e0e0e0; padding: 20px; margin-top: 20px; border-radius: 5px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input[type="text"], input[type="number"] { width: calc(100% - 20px); padding: 8px 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 8px 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { background-color: #3498db; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #2980b9; }
-        .delete-btn { background-color: #e74c3c; font-size: 12px; padding: 5px 10px; margin-left: 15px; }
-        .delete-btn:hover { background-color: #c0392b; }
+        .update-btn { font-size: 12px; padding: 5px 10px; margin-left: 8px; background-color: #27ae60; }
+        .update-btn:hover { background-color: #229954; }
         #statusMessage { margin-top: 20px; padding: 15px; border-radius: 5px; text-align: center; font-weight: bold; display: none; }
         .success { background-color: #e8f5e9; color: #2e7d32; }
         ul { list-style-type: none; padding-left: 0; }
-        li { display: flex; justify-content: space-between; align-items: center; background-color: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 5px; }
+        li { background-color: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 8px; }
+        .item-count-form { display: flex; justify-content: space-between; align-items: center; }
+        .item-count-form span { flex-grow: 1; }
+        .item-count-form input[type="number"] { width: 60px; margin: 0 0 0 10px; text-align: right; }
     </style>
 </head>
 <body>
@@ -30,17 +33,9 @@
 
     <div class="form-section">
         <h2>Actions</h2>
-        <form id="initForm">
-            <label for="initItemName">Add New Item Type:</label>
-            <input type="text" id="initItemName" placeholder="Item Name (e.g., calculator)" required>
-            <label for="initItemTotal">Total Quantity:</label>
-            <input type="number" id="initItemTotal" placeholder="e.g., 20" required>
-            <button type="submit">Add Item</button>
-        </form>
-        <hr>
         <form id="checkoutForm">
             <label for="checkoutItemName">Check Out Item:</label>
-            <input type="text" id="checkoutItemName" placeholder="Item Name" required>
+            <select id="checkoutItemName" required></select>
             <label for="checkoutStudentName">Student Name:</label>
             <input type="text" id="checkoutStudentName" placeholder="Student's Full Name" required>
             <button type="submit">Check Out</button>
@@ -48,7 +43,7 @@
         <hr>
         <form id="checkinForm">
             <label for="checkinItemName">Check In Item:</label>
-            <input type="text" id="checkinItemName" placeholder="Item Name" required>
+            <select id="checkinItemName" required></select>
             <label for="checkinStudentName">Student Name:</label>
             <input type="text" id="checkinStudentName" placeholder="Student's Full Name" required>
             <button type="submit">Check In</button>
@@ -57,32 +52,32 @@
 
     <div class="report-section">
         <h2>Live Summary Report</h2>
-        <div id="summaryReport">
-            <h3>Current Item Counts</h3>
-            <ul id="itemCountsList"><li>No items initialized.</li></ul>
-            <h3>Missing Items</h3>
-            <ul id="missingItemsList"><li>All items are accounted for.</li></ul>
-        </div>
+        <h3>Current Item Counts</h3>
+        <ul id="itemCountsList"><li>Loading...</li></ul>
+        <h3>Missing Items</h3>
+        <ul id="missingItemsList"><li>Loading...</li></ul>
     </div>
 </div>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM Element References ---
-        const initForm = document.getElementById('initForm');
+        // --- DOM References ---
         const checkoutForm = document.getElementById('checkoutForm');
         const checkinForm = document.getElementById('checkinForm');
+        const checkoutItemSelect = document.getElementById('checkoutItemName');
+        const checkinItemSelect = document.getElementById('checkinItemName');
         const statusMessage = document.getElementById('statusMessage');
         const itemCountsList = document.getElementById('itemCountsList');
         const missingItemsList = document.getElementById('missingItemsList');
 
         // --- Event Listeners ---
-        initForm.addEventListener('submit', handleInit);
         checkoutForm.addEventListener('submit', handleCheckout);
         checkinForm.addEventListener('submit', handleCheckin);
-        itemCountsList.addEventListener('click', handleDelete);
+        // NEW: Event delegation for the update forms
+        itemCountsList.addEventListener('submit', handleUpdateQuantity);
 
         // --- Core Functions ---
+        async function populateDropdowns() { /* ... unchanged ... */ }
         async function refreshSummary() {
             try {
                 const response = await fetch('/api/summary');
@@ -91,13 +86,17 @@
 
                 itemCountsList.innerHTML = '';
                 if (summary.itemAvailability.length === 0) {
-                    itemCountsList.innerHTML = '<li>No items initialized.</li>';
+                    itemCountsList.innerHTML = '<li>System not initialized.</li>';
                 } else {
                     summary.itemAvailability.forEach(item => {
                         const li = document.createElement('li');
+                        // MODIFIED: Create a mini form for each item to allow updates
                         li.innerHTML = `
-                            <span>${item.name}: ${item.availableCount} available out of ${item.totalCount}</span>
-                            <button class="delete-btn" data-item-name="${item.name}">Delete</button>
+                            <form class="item-count-form" data-item-name="${item.name}">
+                                <span>${item.name}: ${item.availableCount} available of</span>
+                                <input type="number" value="${item.totalCount}" required min="0">
+                                <button type="submit" class="update-btn">Update</button>
+                            </form>
                         `;
                         itemCountsList.appendChild(li);
                     });
@@ -119,25 +118,129 @@
         }
 
         // --- Event Handlers ---
-        async function handleInit(event) {
-            event.preventDefault();
-            const name = document.getElementById('initItemName').value;
-            const total = document.getElementById('initItemTotal').value;
-            const response = await fetch(`/api/items?name=${encodeURIComponent(name)}&total=${total}`, { method: 'POST' });
-            if (response.ok) {
-                const newItem = await response.json();
-                updateStatus(`Successfully added item: ${newItem.name}`, false);
-                initForm.reset();
-            } else {
-                const errorText = await response.text();
-                updateStatus(errorText, true);
+        // NEW: Handler for updating an item's total quantity
+        async function handleUpdateQuantity(event) {
+            event.preventDefault(); // Stop the form from reloading the page
+            if (event.target.classList.contains('item-count-form')) {
+                const form = event.target;
+                const itemName = form.dataset.itemName;
+                const newTotal = form.querySelector('input[type="number"]').value;
+
+                const response = await fetch(`/api/items/${encodeURIComponent(itemName)}/quantity?total=${newTotal}`, {
+                    method: 'PUT'
+                });
+
+                const resultText = await response.text();
+                updateStatus(resultText, !response.ok);
+                // Refresh the summary to show the new counts
+                refreshSummary();
             }
-            refreshSummary();
+        }
+
+        async function handleCheckout(event) { /* ... unchanged ... */ }
+        async function handleCheckin(event) { /* ... unchanged ... */ }
+
+        // --- Utility ---
+        function updateStatus(message, isError) { /* ... unchanged ... */ }
+
+        // --- Initial Page Load ---
+        async function initializePage() {
+            await populateDropdowns();
+            await refreshSummary();
+        }
+
+        // Unchanged functions are hidden for brevity but should be kept in your file.
+        // Copy the full script block from below.
+    });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const checkoutForm = document.getElementById('checkoutForm');
+        const checkinForm = document.getElementById('checkinForm');
+        const checkoutItemSelect = document.getElementById('checkoutItemName');
+        const checkinItemSelect = document.getElementById('checkinItemName');
+        const statusMessage = document.getElementById('statusMessage');
+        const itemCountsList = document.getElementById('itemCountsList');
+        const missingItemsList = document.getElementById('missingItemsList');
+
+        checkoutForm.addEventListener('submit', handleCheckout);
+        checkinForm.addEventListener('submit', handleCheckin);
+        itemCountsList.addEventListener('submit', handleUpdateQuantity);
+
+        async function populateDropdowns() {
+            try {
+                const response = await fetch('/api/items/names');
+                if (!response.ok) throw new Error('Could not load items.');
+                const itemNames = await response.json();
+                checkoutItemSelect.innerHTML = '';
+                checkinItemSelect.innerHTML = '';
+                itemNames.forEach(name => {
+                    const option1 = new Option(name.charAt(0).toUpperCase() + name.slice(1), name);
+                    const option2 = new Option(name.charAt(0).toUpperCase() + name.slice(1), name);
+                    checkoutItemSelect.add(option1);
+                    checkinItemSelect.add(option2);
+                });
+            } catch (error) {
+                updateStatus(error.message, true);
+            }
+        }
+
+        async function refreshSummary() {
+            try {
+                const response = await fetch('/api/summary');
+                if (!response.ok) throw new Error('Failed to fetch summary.');
+                const summary = await response.json();
+
+                itemCountsList.innerHTML = '';
+                if (summary.itemAvailability.length === 0) {
+                    itemCountsList.innerHTML = '<li>System not initialized.</li>';
+                } else {
+                    summary.itemAvailability.forEach(item => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <form class="item-count-form" data-item-name="${item.name}">
+                                <span>${item.name.charAt(0).toUpperCase() + item.name.slice(1)}: ${item.availableCount} available of ${item.totalCount}</span>
+                                <input type="number" value="${item.totalCount}" required min="0" class="total-input">
+                                <button type="submit" class="update-btn">Update</button>
+                            </form>
+                        `;
+                        itemCountsList.appendChild(li);
+                    });
+                }
+
+                missingItemsList.innerHTML = '';
+                if (summary.missingItems.length === 0) {
+                    missingItemsList.innerHTML = '<li>All items are accounted for. Excellent!</li>';
+                } else {
+                    summary.missingItems.forEach(record => {
+                        const li = document.createElement('li');
+                        li.textContent = `Item: ${record.itemName} - Checked out to: ${record.studentName}`;
+                        missingItemsList.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                updateStatus(error.message, true);
+            }
+        }
+
+        async function handleUpdateQuantity(event) {
+            event.preventDefault();
+            if (event.target.classList.contains('item-count-form')) {
+                const form = event.target;
+                const itemName = form.dataset.itemName;
+                const newTotal = form.querySelector('.total-input').value;
+                const response = await fetch(`/api/items/${encodeURIComponent(itemName)}/quantity?total=${newTotal}`, {
+                    method: 'PUT'
+                });
+                const resultText = await response.text();
+                updateStatus(resultText, !response.ok);
+                refreshSummary();
+            }
         }
 
         async function handleCheckout(event) {
             event.preventDefault();
-            const itemName = document.getElementById('checkoutItemName').value;
+            const itemName = checkoutItemSelect.value;
             const studentName = document.getElementById('checkoutStudentName').value;
             const response = await fetch(`/api/checkout?itemName=${encodeURIComponent(itemName)}&studentName=${encodeURIComponent(studentName)}`, { method: 'POST' });
             const resultText = await response.text();
@@ -148,7 +251,7 @@
 
         async function handleCheckin(event) {
             event.preventDefault();
-            const itemName = document.getElementById('checkinItemName').value;
+            const itemName = checkinItemSelect.value;
             const studentName = document.getElementById('checkinStudentName').value;
             const response = await fetch(`/api/checkin?itemName=${encodeURIComponent(itemName)}&studentName=${encodeURIComponent(studentName)}`, { method: 'POST' });
             const resultText = await response.text();
@@ -157,42 +260,24 @@
             refreshSummary();
         }
 
-        async function handleDelete(event) {
-            if (event.target.classList.contains('delete-btn')) {
-                const itemName = event.target.dataset.itemName;
-                if (confirm(`Are you sure you want to delete the item type '${itemName}'? This cannot be undone.`)) {
-                    const response = await fetch(`/api/items/${encodeURIComponent(itemName)}`, { method: 'DELETE' });
-                    const resultText = await response.text();
-                    updateStatus(resultText, !response.ok);
-                    refreshSummary();
-                }
-            }
-        }
-
-        // --- Utility Functions ---
-
-        /**
-         * **MODIFIED**: Displays a popup alert for errors and an on-page message for success.
-         */
         function updateStatus(message, isError) {
-            // Always hide the on-page status message first
             statusMessage.style.display = 'none';
-
             if (isError) {
-                // Use the browser's native alert for popups
                 alert(message);
             } else {
-                // For success, show the message on the page
                 statusMessage.textContent = message;
                 statusMessage.className = 'success';
                 statusMessage.style.display = 'block';
             }
         }
 
-        // Load initial data
-        refreshSummary();
+        async function initializePage() {
+            await populateDropdowns();
+            await refreshSummary();
+        }
+
+        initializePage();
     });
 </script>
-
 </body>
 </html>

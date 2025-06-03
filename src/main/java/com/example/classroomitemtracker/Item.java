@@ -55,4 +55,14 @@ public class Item {
             return false;
         }
     }
+
+    // Add these two methods inside the Item class
+
+    public void setTotalCount(int totalCount) {
+        this.totalCount = totalCount;
+    }
+
+    public void setAvailableCount(int availableCount) {
+        this.availableCount = availableCount;
+    }
 }
